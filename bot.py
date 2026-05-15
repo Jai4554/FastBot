@@ -9,15 +9,12 @@ import threading
 import os
 from flask import Flask
 
-# Aapka Bot Token
-TOKEN = "8242456696:AAFcejLBmeNo96zAe9c9w83RR9H_vPceQ1s"
+TOKEN = "8242456696:AAGQUsixSvx1Uja0KeivSvkKUqMpDghKt8o"
 bot = telebot.TeleBot(TOKEN, parse_mode='HTML')
 
 CHANNELS = ["@iSpeedX1", -1002914762713, -1002982705158]
-
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Mobile Safari/537.36"
 ]
 
@@ -48,17 +45,18 @@ def send_welcome_message(chat_id):
         "Tide\n"
         " ╰┈➤ <code>http://tracking.gridadss.com...</code>\n"
         "MEXC\n"
-        " ╰┈➤ <code>http://tracking.gridadss.com...</code></b>"
+        " ╰┈➤ <code>http://tracking.gridadss.com...</code>\n"
+        "Amazon\n"
+        " ╰┈➤ <code>https://mobavenue.go2affise.com...</code></b>"
     )
     bot.send_message(chat_id, msg_text)
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    user_id = message.from_user.id
-    if check_membership(user_id):
+    if check_membership(message.from_user.id):
         send_welcome_message(message.chat.id)
     else:
-        bot.send_message(message.chat.id, "<b>Please join our channels first to use this bot!</b>", reply_markup=force_sub_markup())
+        bot.send_message(message.chat.id, "<b>Please join our channels first!</b>", reply_markup=force_sub_markup())
 
 @bot.callback_query_handler(func=lambda call: call.data == "check_joined")
 def check_joined_callback(call):
@@ -77,68 +75,79 @@ def extract_tri_value(url, session, headers):
         if match: return match.group(1)
         for cookie in session.cookies:
             if "TRI" in cookie.name: return cookie.value
-        match = re.search(r'TRI\d*=([^&?\s"\'<>]+)', response.text)
+    except: pass
+    return None
+
+def extract_afclick_value(url, session, headers):
+    try:
+        response = session.get(url, headers=headers, timeout=15, allow_redirects=True)
+        # Cookie check
+        if 'afclick' in session.cookies:
+            return session.cookies['afclick']
+        # URL fallback check
+        match = re.search(r'afclick=([^;?\s"\'&]+)', response.text)
         if match: return match.group(1)
-    except:
-        pass
+    except: pass
     return None
 
 def process_task_background(message):
     chat_id = message.chat.id
     target_url = message.text.strip()
-    processing_msg = bot.send_message(chat_id, "<b>Processing...</b>")
+    processing_msg = bot.send_message(chat_id, "<b>Processing Task...</b>")
     
     while True:
         try:
             session = requests.Session()
-            ua = random.choice(USER_AGENTS)
-            headers = {"User-Agent": ua}
-            token = extract_tri_value(target_url, session, headers)
+            headers = {"User-Agent": random.choice(USER_AGENTS)}
             
-            if token:
-                final_token = urllib.parse.unquote(token)
-                postback_url = f"http://tracking.gridadss.com/conv?yeahmobi_ocpa&event=install&transaction_id={final_token}"
-                pb_res = requests.get(postback_url, headers=headers, timeout=15)
-                
-                if pb_res.status_code == 200:
-                    bot.edit_message_text("<b>Task Complete Success!</b>", chat_id=chat_id, message_id=processing_msg.message_id)
-                    break 
-        except:
-            pass 
-        time.sleep(3)
+            # Logic for Amazon (Mobavenue)
+            if "mobavenue.go2affise.com" in target_url:
+                click_id = extract_afclick_value(target_url, session, headers)
+                if click_id:
+                    postback_url = f"https://offers-mobavenue.affise.com/postback?click_id={click_id}&goal_value=install"
+                    res = requests.get(postback_url, headers=headers, timeout=15)
+                    if res.status_code == 200:
+                        bot.edit_message_text("<b>Amazon Task Complete Success!</b>", chat_id=chat_id, message_id=processing_msg.message_id)
+                        break
+
+            # Logic for Tide/MEXC (Gridadss)
+            elif "tracking.gridadss.com" in target_url:
+                token = extract_tri_value(target_url, session, headers)
+                if token:
+                    final_token = urllib.parse.unquote(token)
+                    postback_url = f"http://tracking.gridadss.com/conv?yeahmobi_ocpa&event=install&transaction_id={final_token}"
+                    res = requests.get(postback_url, headers=headers, timeout=15)
+                    if res.status_code == 200:
+                        bot.edit_message_text("<b>Task Complete Success!</b>", chat_id=chat_id, message_id=processing_msg.message_id)
+                        break
+        except: pass
+        time.sleep(5)
 
 @bot.message_handler(func=lambda message: message.text.startswith('http'))
 def handle_link(message):
-    user_id = message.from_user.id
     target_url = message.text.strip()
-    if not check_membership(user_id):
+    if not check_membership(message.from_user.id):
         bot.send_message(message.chat.id, "<b>Please join our channels first!</b>", reply_markup=force_sub_markup())
         return
-    if not (target_url.startswith('http://tracking.gridadss.com') or target_url.startswith('https://tracking.gridadss.com')):
+    
+    allowed_domains = ['tracking.gridadss.com', 'mobavenue.go2affise.com']
+    if not any(domain in target_url for domain in allowed_domains):
         bot.send_message(message.chat.id, "<b>Invalid Task Link</b>")
         return
+
     try:
         bot.set_message_reaction(message.chat.id, message.message_id, [ReactionTypeEmoji('🔥')])
-    except:
-        pass 
+    except: pass
     threading.Thread(target=process_task_background, args=(message,)).start()
 
-# ==========================================
-# RENDER KE LIYE DUMMY FLASK SERVER
-# ==========================================
 app = Flask(__name__)
-
 @app.route('/')
-def home():
-    return "Bot is running 24/7 on Render!"
+def home(): return "Bot is running!"
 
 def run_web():
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
 
 if __name__ == "__main__":
-    # Flask ko background me chalu karo
     threading.Thread(target=run_web).start()
-    print("Bot is running...")
-    # Bot ko chalu karo
     bot.infinity_polling()

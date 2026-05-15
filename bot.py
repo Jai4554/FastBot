@@ -10,7 +10,7 @@ import os
 from flask import Flask
 
 # Aapka Bot Token
-TOKEN = "8242456696:AAGQUsixSvx1Uja0KeivSvkKUqMpDghKt8o"
+TOKEN = "8242456696:AAFcejLBmeNo96zAe9c9w83RR9H_vPceQ1s"
 bot = telebot.TeleBot(TOKEN, parse_mode='HTML')
 
 CHANNELS = ["@iSpeedX1", -1002914762713, -1002982705158]

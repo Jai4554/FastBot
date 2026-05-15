@@ -44,13 +44,11 @@ def force_sub_markup():
 def send_welcome_message(chat_id):
     msg_text = (
         "<b>Welcome SpeedX™\n"
-        "Send Below Task Link Here\n\n"
+        "Send Below Task Link Here\n"
         "Tide\n"
         " ╰┈➤ <code>http://tracking.gridadss.com...</code>\n"
         "MEXC\n"
-        " ╰┈➤ <code>http://tracking.gridadss.com...</code>\n"
-        "Amazon\n"
-        " ╰┈➤ <code>https://mobavenue.go2affise...</code></b>"
+        " ╰┈➤ <code>http://tracking.gridadss.com...</code></b>"
     )
     bot.send_message(chat_id, msg_text)
 
@@ -95,80 +93,34 @@ def process_task_background(message):
             session = requests.Session()
             ua = random.choice(USER_AGENTS)
             headers = {"User-Agent": ua}
+            token = extract_tri_value(target_url, session, headers)
             
-            # ==========================================
-            # TASK 1: GRIDADSS (Tide & MEXC)
-            # ==========================================
-            if 'tracking.gridadss.com' in target_url:
-                token = extract_tri_value(target_url, session, headers)
-                if token:
-                    final_token = urllib.parse.unquote(token)
-                    postback_url = f"http://tracking.gridadss.com/conv?yeahmobi_ocpa&event=install&transaction_id={final_token}"
-                    pb_res = requests.get(postback_url, headers=headers, timeout=15)
-                    
-                    if pb_res.status_code == 200:
-                        bot.edit_message_text("<b>Task Complete Success!</b>", chat_id=chat_id, message_id=processing_msg.message_id)
-                        break
-            
-            # ==========================================
-            # TASK 2: AMAZON (Mobavenue)
-            # ==========================================
-            elif 'mobavenue.go2affise' in target_url:
-                # Link open karo takii cookie generate ho sake
-                session.get(target_url, headers=headers, timeout=20, allow_redirects=True)
+            if token:
+                final_token = urllib.parse.unquote(token)
+                postback_url = f"http://tracking.gridadss.com/conv?yeahmobi_ocpa&event=install&transaction_id={final_token}"
+                pb_res = requests.get(postback_url, headers=headers, timeout=15)
                 
-                # Cookie se 'afclick' nikalna
-                click_id = None
-                for cookie in session.cookies:
-                    if cookie.name == 'afclick':
-                        click_id = cookie.value
-                        break
-                
-                if click_id:
-                    # Postback URL generate karke call karna
-                    postback_url = f"https://offers-mobavenue.affise.com/postback?click_id={click_id}&goal_value=install"
-                    
-                    # Amazon task ka postback time leta hai isliye timeout thoda zyada rakha hai (30 sec)
-                    pb_res = requests.get(postback_url, headers=headers, timeout=30)
-                    
-                    if pb_res.status_code == 200:
-                        try:
-                            # Response ko JSON me decode karke status verify karna
-                            pb_json = pb_res.json()
-                            if pb_json.get("status") == 1:
-                                bot.edit_message_text("<b>Task Complete Success!</b>", chat_id=chat_id, message_id=processing_msg.message_id)
-                                break
-                        except Exception:
-                            pass # JSON error aaya toh wapis loop chalega
-
-        except Exception:
-            pass
-        
-        # Thodi der ruk kar wapis try karega agar success nahi hua
+                if pb_res.status_code == 200:
+                    bot.edit_message_text("<b>Task Complete Success!</b>", chat_id=chat_id, message_id=processing_msg.message_id)
+                    break 
+        except:
+            pass 
         time.sleep(3)
 
 @bot.message_handler(func=lambda message: message.text.startswith('http'))
 def handle_link(message):
     user_id = message.from_user.id
     target_url = message.text.strip()
-    
     if not check_membership(user_id):
         bot.send_message(message.chat.id, "<b>Please join our channels first!</b>", reply_markup=force_sub_markup())
         return
-        
-    # Check if the link belongs to either Gridadss OR Amazon (Mobavenue)
-    is_gridadss = target_url.startswith('http://tracking.gridadss.com') or target_url.startswith('https://tracking.gridadss.com')
-    is_amazon = 'mobavenue.go2affise' in target_url
-
-    if not (is_gridadss or is_amazon):
+    if not (target_url.startswith('http://tracking.gridadss.com') or target_url.startswith('https://tracking.gridadss.com')):
         bot.send_message(message.chat.id, "<b>Invalid Task Link</b>")
         return
-        
     try:
         bot.set_message_reaction(message.chat.id, message.message_id, [ReactionTypeEmoji('🔥')])
     except:
-        pass
-        
+        pass 
     threading.Thread(target=process_task_background, args=(message,)).start()
 
 # ==========================================
